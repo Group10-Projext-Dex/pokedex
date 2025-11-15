@@ -75,40 +75,26 @@ data class PokemonStat(
     @SerialName("effort") val effort: Int
 )
 
+
 // --- HELPER EXTENSIONS ---
 
-/**
- * Get the primary type (first type)
- */
 fun Pokemon.getPrimaryType(): String? {
     return types.firstOrNull()?.type?.name
 }
 
-/**
- * Get all type names
- */
 fun Pokemon.getTypeNames(): List<String> {
-    return types.map { it.type.name }
+    return types.mapNotNull { it.type?.name }
 }
 
-/**
- * Get the best sprite URL available
- */
 fun Pokemon.getBestSpriteUrl(): String? {
     return sprites.other?.officialArtwork?.frontDefault
         ?: sprites.frontDefault
 }
 
-/**
- * Convert height to meters
- */
 fun Pokemon.getHeightInMeters(): Double {
     return height / 10.0
 }
 
-/**
- * Convert height to feet and inches
- */
 fun Pokemon.getHeightInFeet(): String {
     val meters = getHeightInMeters()
     val totalInches = meters * 39.3701
@@ -117,44 +103,26 @@ fun Pokemon.getHeightInFeet(): String {
     return "${feet}'${inches}\""
 }
 
-/**
- * Convert weight to kilograms
- */
 fun Pokemon.getWeightInKg(): Double {
     return weight / 10.0
 }
 
-/**
- * Convert weight to pounds
- */
 fun Pokemon.getWeightInLbs(): Double {
     return getWeightInKg() * 2.20462
 }
 
-/**
- * Get non-hidden abilities
- */
 fun Pokemon.getRegularAbilities(): List<String> {
-    return abilities.filter { !it.isHidden }.map { it.ability.name }
+    return abilities.filter { !it.isHidden }.mapNotNull { it.ability?.name }
 }
 
-/**
- * Get hidden ability if exists
- */
 fun Pokemon.getHiddenAbility(): String? {
-    return abilities.find { it.isHidden }?.ability.name
+    return abilities.find { it.isHidden }?.ability?.name
 }
 
-/**
- * Get stat by name (hp, attack, defense, etc.)
- */
 fun Pokemon.getStatByName(statName: String): Int? {
-    return stats.find { it.stat.name == statName }?.baseStat
+    return stats.find { it.stat?.name == statName }?.baseStat
 }
 
-/**
- * Get total stats (sum of all base stats)
- */
 fun Pokemon.getTotalStats(): Int {
     return stats.sumOf { it.baseStat }
 }
