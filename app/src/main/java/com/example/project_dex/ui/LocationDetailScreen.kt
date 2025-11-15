@@ -2,6 +2,8 @@ package com.example.project_dex.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,9 +19,6 @@ import com.example.project_dex.viewmodels.LocationDetailUiState
 import com.example.project_dex.viewmodels.LocationViewModel
 import java.util.Locale
 
-/**
- * Detail screen for a specific location
- */
 @Composable
 fun LocationDetailScreen(
     location: ApiResource,
@@ -28,14 +27,8 @@ fun LocationDetailScreen(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (val state = locationViewModel.detailUiState) {
-            is LocationDetailUiState.Loading -> {
-                LoadingView()
-            }
-
-            is LocationDetailUiState.Error -> {
-                ErrorView()
-            }
-
+            is LocationDetailUiState.Loading -> LoadingView()
+            is LocationDetailUiState.Error -> ErrorView()
             is LocationDetailUiState.Success -> {
                 LocationDetailContent(
                     locationData = state.location,
@@ -47,9 +40,6 @@ fun LocationDetailScreen(
     }
 }
 
-/**
- * Loading view
- */
 @Composable
 private fun LoadingView() {
     Box(
@@ -60,9 +50,6 @@ private fun LoadingView() {
     }
 }
 
-/**
- * Error view
- */
 @Composable
 private fun ErrorView() {
     Box(
@@ -73,9 +60,6 @@ private fun ErrorView() {
     }
 }
 
-/**
- * Main content for location details
- */
 @Composable
 private fun LocationDetailContent(
     locationData: Location,
@@ -87,9 +71,9 @@ private fun LocationDetailContent(
             locationViewModel.fetchAllAreaEncounters(locationData.areas)
         }
     }
-    
-    val englishName = locationData.names.find { 
-        it.language.name == "en" 
+
+    val englishName = locationData.names.find {
+        it.language.name == "en"
     }?.name ?: locationData.name
         .replace("-", " ")
         .split(" ")
@@ -103,56 +87,68 @@ private fun LocationDetailContent(
         .flatten()
         .distinctBy { it.pokemon.name }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        // Back button
-        item {
-            Button(
-                onClick = onBackPressed,
-                modifier = Modifier.padding(bottom = 16.dp)
-            ) {
-                Text("← Back to Locations")
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top bar with back button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackPressed) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to Locations"
+                )
             }
-        }
-
-        // Location info card
-        item {
-            LocationInfoCard(
-                englishName = englishName,
-                locationData = locationData,
-                pokemonCount = allPokemon.size
+            Text(
+                text = "Location Details",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Pokemon encounters
-        if (allPokemon.isNotEmpty()) {
+        // Scrollable content
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             item {
-                PokemonEncountersCard(
-                    allPokemon = allPokemon,
-                    locationViewModel = locationViewModel
+                LocationInfoCard(
+                    englishName = englishName,
+                    locationData = locationData,
+                    pokemonCount = allPokemon.size
                 )
             }
-        } else if (locationData.areas.isNotEmpty()) {
-            item {
-                LoadingPokemonCard()
-            }
-        }
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
+            if (allPokemon.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Pokémon Found Here",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+
+                items(allPokemon.size) { index ->
+                    val encounter = allPokemon[index]
+                    val pokemonDetails = locationViewModel.pokemonDetailsUiState[encounter.pokemon.name]
+
+                    PokemonEncounterCard(
+                        encounter = encounter,
+                        pokemonDetails = pokemonDetails
+                    )
+                }
+            } else if (locationData.areas.isNotEmpty()) {
+                item {
+                    LoadingPokemonCard()
+                }
+            }
         }
     }
 }
 
-/**
- * Location information card
- */
 @Composable
 private fun LocationInfoCard(
     englishName: String,
@@ -161,90 +157,101 @@ private fun LocationInfoCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 text = englishName,
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 12.dp)
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             locationData.region?.let { region ->
-                Text(
-                    text = "Region: ${
-                        region.name.replaceFirstChar {
-                            if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
-                        }
-                    }",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                InfoRow(
+                    label = "Region:",
+                    value = region.name.replaceFirstChar {
+                        if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
+                    }
                 )
             }
 
             if (locationData.gameIndices.isNotEmpty()) {
-                Text(
-                    text = "Appears in ${locationData.gameIndices.size} game(s)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                InfoRow(
+                    label = "Games:",
+                    value = "${locationData.gameIndices.size} game(s)"
                 )
             }
 
             if (pokemonCount > 0) {
-                Text(
-                    text = "$pokemonCount different Pokémon found here",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                InfoRow(
+                    label = "Pokémon:",
+                    value = "$pokemonCount different species",
+                    valueColor = MaterialTheme.colorScheme.primary
                 )
             }
         }
     }
 }
 
-/**
- * Pokemon encounters card
- */
 @Composable
-private fun PokemonEncountersCard(
-    allPokemon: List<PokemonEncounter>,
-    locationViewModel: LocationViewModel
+private fun InfoRow(
+    label: String,
+    value: String,
+    valueColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge,
+            color = valueColor
+        )
+    }
+}
+
+@Composable
+private fun PokemonEncounterCard(
+    encounter: PokemonEncounter,
+    pokemonDetails: Pokemon?
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Pokémon Found Here",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 12.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PokemonImage(pokemonDetails = pokemonDetails)
+            Spacer(modifier = Modifier.width(16.dp))
+            PokemonDetails(
+                encounter = encounter,
+                pokemonDetails = pokemonDetails
             )
-
-            allPokemon.forEachIndexed { index, encounter ->
-                val pokemonDetails = locationViewModel.pokemonDetailsUiState[encounter.pokemon.name]
-                
-                PokemonEncounterItem(
-                    encounter = encounter,
-                    pokemonDetails = pokemonDetails
-                )
-                
-                if (index < allPokemon.size - 1) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        thickness = 0.5.dp
-                    )
-                }
-            }
         }
     }
 }
 
-/**
- * Loading Pokemon card
- */
 @Composable
 private fun LoadingPokemonCard() {
     Card(
@@ -269,141 +276,105 @@ private fun LoadingPokemonCard() {
     }
 }
 
-/**
- * Individual Pokemon encounter item with image and details
- */
-@Composable
-private fun PokemonEncounterItem(
-    encounter: PokemonEncounter,
-    pokemonDetails: Pokemon?
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Pokemon image
-        PokemonImage(pokemonDetails = pokemonDetails)
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // Pokemon details
-        PokemonDetails(
-            encounter = encounter,
-            pokemonDetails = pokemonDetails
-        )
-    }
-}
-
-/**
- * Pokemon image with loading/error states
- */
 @Composable
 private fun PokemonImage(pokemonDetails: Pokemon?) {
-    Box(
-        modifier = Modifier.size(80.dp),
-        contentAlignment = Alignment.Center
+    Surface(
+        modifier = Modifier.size(90.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
-        if (pokemonDetails != null) {
-            val imageUrl = pokemonDetails.getBestSpriteUrl()
-            
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(imageUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = pokemonDetails.name,
-                modifier = Modifier.size(80.dp),
-                contentScale = ContentScale.Fit
-            )
-        } else {
-            // Loading placeholder
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp
-            )
-        }
-    }
-}
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (pokemonDetails != null) {
+                val imageUrl = pokemonDetails.getBestSpriteUrl()
 
-/**
- * Pokemon details (name, types, height, weight, encounter info)
- */
-@Composable
-private fun PokemonDetails(
-    encounter: PokemonEncounter,
-    pokemonDetails: Pokemon?
-) {
-    Column {
-        // Pokemon name
-        Text(
-            text = encounter.pokemon.name
-                .replaceFirstChar {
-                    if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
-                },
-            style = MaterialTheme.typography.bodyLarge
-        )
-        
-        // Types, Height, Weight
-        if (pokemonDetails != null) {
-            Row(
-                modifier = Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Types
-                pokemonDetails.types.forEach { typeInfo ->
-                    TypeBadge(typeName = typeInfo.type.name)
-                }
-            }
-            
-            // Height and Weight
-            Text(
-                text = "${pokemonDetails.getHeightInMeters()}m • ${String.format("%.1f", pokemonDetails.getWeightInKg())}kg",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp)
-            )
-        }
-        
-        // Encounter details
-        if (encounter.versionDetails.isNotEmpty()) {
-            val firstVersion = encounter.versionDetails.first()
-            if (firstVersion.encounterDetails.isNotEmpty()) {
-                val detail = firstVersion.encounterDetails.first()
-                Text(
-                    text = "Level ${detail.minLevel}-${detail.maxLevel} • ${detail.chance}% chance",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp)
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = pokemonDetails.name,
+                    modifier = Modifier.size(80.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
                 )
             }
         }
     }
 }
 
-/**
- * Type badge with color
- */
+@Composable
+private fun PokemonDetails(
+    encounter: PokemonEncounter,
+    pokemonDetails: Pokemon?
+) {
+    Column {
+        Text(
+            text = encounter.pokemon.name
+                .replaceFirstChar {
+                    if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
+                },
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (pokemonDetails != null) {
+            Row(
+                modifier = Modifier.padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                pokemonDetails.types.forEach { typeInfo ->
+                    TypeBadge(typeName = typeInfo.type.name)
+                }
+            }
+
+            Text(
+                text = "${pokemonDetails.getHeightInMeters()}m • ${String.format("%.1f", pokemonDetails.getWeightInKg())}kg",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (encounter.versionDetails.isNotEmpty()) {
+            val firstVersion = encounter.versionDetails.first()
+            if (firstVersion.encounterDetails.isNotEmpty()) {
+                val detail = firstVersion.encounterDetails.first()
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Level ${detail.minLevel}-${detail.maxLevel} • ${detail.chance}% chance",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun TypeBadge(typeName: String) {
     Surface(
         color = getTypeColor(typeName),
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.padding(vertical = 2.dp)
+        shape = MaterialTheme.shapes.small
     ) {
         Text(
             text = typeName.replaceFirstChar {
                 if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
             },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            style = MaterialTheme.typography.labelMedium,
+            color = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
     }
 }
 
-/**
- * Get color for Pokemon type
- */
 @Composable
 private fun getTypeColor(typeName: String): androidx.compose.ui.graphics.Color {
     return when (typeName.lowercase()) {
