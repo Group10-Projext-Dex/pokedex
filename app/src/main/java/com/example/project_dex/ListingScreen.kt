@@ -90,6 +90,7 @@ fun ListingScreen(
     resourceType: String, // e.g., "pokemon", "move"
     searchHint: String,
     modifier: Modifier = Modifier,
+    onPokemonSelected: (String) -> Unit, // New parameter for Pokemon selection
     listingViewModel: ListingViewModel = viewModel()
 ) {
     // Trigger the data fetch when the screen is first composed.

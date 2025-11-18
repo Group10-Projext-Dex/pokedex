@@ -44,7 +44,9 @@ android {
 }
 
 dependencies {
-    // START: Updated Networking Dependencies
+    // Image loading library
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    // Updated Networking Dependencies
     implementation("com.codepath.libraries:asynchttpclient:2.2.0") // Use the new library
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3") // Keep for JSON parsing
 
