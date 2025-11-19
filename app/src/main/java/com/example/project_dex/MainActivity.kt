@@ -1,5 +1,6 @@
-package com.example.project_dex
 
+package com.example.project_dex
+//.
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -89,6 +90,17 @@ data class LocationDetails(
     val region: ApiResource?
 )
 
+@Serializable
+data class PokemonSlot(
+    val pokemon: ApiResource
+)
+
+@Serializable
+data class PokemonTypeDetails(
+    val name: String,
+    val pokemon: List<PokemonSlot>
+)
+
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,20 +110,23 @@ class MainActivity : ComponentActivity() {
             Project_dexTheme {
                 var currentScreen by remember { mutableStateOf("menu") }
                 var selectedPokemonUrl by remember { mutableStateOf<String?>(null) }
-                var selectedLocationUrl by remember { mutableStateOf<String?>(null) } // <-- ADD THIS
+                var selectedLocationUrl by remember { mutableStateOf<String?>(null) }
+                var selectedTypeUrl by remember { mutableStateOf<String?>(null) }
 
                 // Navigation logic
                 val navigateBack = {
                     when {
                         selectedPokemonUrl != null -> selectedPokemonUrl = null
-                        selectedLocationUrl != null -> selectedLocationUrl = null // <-- ADD THIS
+                        selectedTypeUrl != null -> selectedTypeUrl = null
+                        selectedLocationUrl != null -> selectedLocationUrl = null
                         currentScreen != "menu" -> currentScreen = "menu"
                     }
                 }
 
                 val topBarTitle = when {
                     selectedPokemonUrl != null -> "Pokemon Details"
-                    selectedLocationUrl != null -> "Pokémon in Area" // <-- ADD THIS
+                    selectedTypeUrl != null -> "Pokémon by Type"
+                    selectedLocationUrl != null -> "Pokémon in Area"
                     currentScreen != "menu" -> currentScreen.replaceFirstChar { it.titlecase() } + " List"
                     else -> "PokéDex"
                 }
@@ -120,7 +135,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     topBar = {
                         // Updated condition to show TopAppBar
-                        if (currentScreen != "menu" || selectedPokemonUrl != null || selectedLocationUrl != null) {
+                        if (currentScreen != "menu" || selectedPokemonUrl != null || selectedLocationUrl != null || selectedTypeUrl != null) {
                             TopAppBar(
                                 title = { Text(topBarTitle) },
                                 navigationIcon = {
@@ -144,7 +159,14 @@ class MainActivity : ComponentActivity() {
                                 modifier = screenModifier
                             )
                         }
-                        selectedLocationUrl != null -> { // <-- ADD THIS BLOCK
+                        selectedTypeUrl != null -> {
+                            TypeDetailScreen(
+                                typeUrl = selectedTypeUrl!!,
+                                modifier = screenModifier,
+                                onPokemonSelected = { url -> selectedPokemonUrl = url }
+                            )
+                        }
+                        selectedLocationUrl != null -> {
                             LocationDetailScreen(
                                 locationUrl = selectedLocationUrl!!,
                                 modifier = screenModifier,
@@ -163,13 +185,19 @@ class MainActivity : ComponentActivity() {
                                     modifier = screenModifier,
                                     onResourceSelected = { url -> selectedPokemonUrl = url }
                                 )
-                                "location" -> ListingScreen( // <-- MODIFY THIS
+                                "location" -> ListingScreen(
                                     resourceType = currentScreen,
                                     searchHint = "Search for a location...",
                                     modifier = screenModifier,
-                                    onResourceSelected = { url -> selectedLocationUrl = url } // Pass the location URL
+                                    onResourceSelected = { url -> selectedLocationUrl = url }
                                 )
-                                "type", "ability", "item", "move" -> ListingScreen(
+                                "type" -> ListingScreen(
+                                    resourceType = currentScreen,
+                                    searchHint = "Search for a type...",
+                                    modifier = screenModifier,
+                                    onResourceSelected = { url -> selectedTypeUrl = url }
+                                )
+                                "ability", "item", "move" -> ListingScreen(
                                     resourceType = currentScreen,
                                     searchHint = "Search for a(n) $currentScreen...",
                                     modifier = screenModifier,
@@ -338,6 +366,84 @@ fun LocationDetailScreen(locationUrl: String, modifier: Modifier = Modifier, onP
                         )
 
                         // Pokémon Name
+                        Text(
+                            text = pokemon.name.replaceFirstChar { it.titlecase() },
+                            modifier = Modifier.padding(start = 16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TypeDetailScreen(typeUrl: String, modifier: Modifier = Modifier, onPokemonSelected: (String) -> Unit) {
+    var pokemonList by remember { mutableStateOf<List<ApiResource>>(emptyList()) }
+    var typeName by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    val json = Json { ignoreUnknownKeys = true }
+
+    LaunchedEffect(typeUrl) {
+        isLoading = true
+        val client = AsyncHttpClient()
+
+        client.get(typeUrl, object : JsonHttpResponseHandler() {
+            override fun onSuccess(statusCode: Int, headers: Headers, jsonResponse: JSON) {
+                try {
+                    val typeDetails = json.decodeFromString<PokemonTypeDetails>(jsonResponse.jsonObject.toString())
+                    pokemonList = typeDetails.pokemon.map { it.pokemon }
+                    typeName = typeDetails.name
+                } catch (e: Exception) {
+                    // Handle parsing error
+                } finally {
+                    isLoading = false
+                }
+            }
+
+            override fun onFailure(statusCode: Int, headers: Headers?, response: String?, throwable: Throwable?) {
+                isLoading = false
+            }
+        })
+    }
+
+    if (isLoading) {
+        Text("Loading Pokémon...", modifier = modifier.padding(16.dp))
+    } else if (pokemonList.isEmpty()) {
+        Text("No Pokémon found for this type.", modifier = modifier.padding(16.dp))
+    } else {
+        LazyColumn(modifier = modifier) {
+            item {
+                Text(
+                    text = "Pokémon of type: ${typeName?.replaceFirstChar { it.titlecase() }}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            items(pokemonList) { pokemon ->
+                Button(
+                    onClick = { onPokemonSelected(pokemon.url) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val pokemonId = pokemon.url.split("/").dropLast(1).last()
+                        val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$pokemonId.png"
+
+                        AsyncImage(
+                            model = spriteUrl,
+                            contentDescription = "${pokemon.name} sprite",
+                            modifier = Modifier.size(56.dp)
+                        )
+
                         Text(
                             text = pokemon.name.replaceFirstChar { it.titlecase() },
                             modifier = Modifier.padding(start = 16.dp)
