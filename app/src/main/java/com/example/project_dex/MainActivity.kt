@@ -10,16 +10,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -30,27 +33,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.codepath.asynchttpclient.AsyncHttpClient
 import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler
 import com.example.project_dex.ui.theme.Project_dexTheme
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
-import coil.compose.AsyncImage
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
 
-// Data class for the list items from PokeAPI
+// ----------------------------------------------------------------------
+// shared data models for list-style endpoints (pokemon, abilities, etc.)
+// ----------------------------------------------------------------------
+
 @Serializable
 data class ApiResource(
     val name: String,
@@ -62,14 +61,13 @@ data class ApiResponse(
     val results: List<ApiResource>
 )
 
+// ----------------------------------------------------------------------
+// location-related models (used for "Locations" flow)
+// ----------------------------------------------------------------------
+
 @Serializable
 data class PokemonEncounter(
     val pokemon: ApiResource
-)
-
-@Serializable
-data class EncounterMethodRate(
-    val pokemon_encounters: List<PokemonEncounter>
 )
 
 @Serializable
@@ -89,29 +87,63 @@ data class LocationDetails(
     val region: ApiResource?
 )
 
+// ----------------------------------------------------------------------
+// ability details models (used for the ability detail screen I added)
+// ----------------------------------------------------------------------
+
+@Serializable
+data class AbilityDetails(
+    val name: String,
+    val effect_entries: List<EffectEntry>
+)
+
+@Serializable
+data class EffectEntry(
+    val effect: String,
+    val short_effect: String,
+    val language: LanguageRef
+)
+
+@Serializable
+data class LanguageRef(
+    val name: String
+)
+
 class MainActivity : ComponentActivity() {
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             Project_dexTheme {
-                var currentScreen by remember { mutableStateOf("menu") }
-                var selectedPokemonUrl by remember { mutableStateOf<String?>(null) }
-                var selectedLocationUrl by remember { mutableStateOf<String?>(null) } // <-- ADD THIS
 
-                // Navigation logic
+                // currentScreen = which list/menu we are on ("menu", "pokemon", "ability", etc.)
+                var currentScreen by remember { mutableStateOf("menu") }
+
+                // these nullable urls mean "we are looking at a detail screen for X"
+                var selectedPokemonUrl by remember { mutableStateOf<String?>(null) }
+                var selectedLocationUrl by remember { mutableStateOf<String?>(null) }
+
+                // JUAN: new state for ability details – when this is not null we show AbilityDetailScreen
+                var selectedAbilityUrl by remember { mutableStateOf<String?>(null) }
+
+                // simple back behavior – clear the most specific detail first, then fall back to menu
                 val navigateBack = {
                     when {
                         selectedPokemonUrl != null -> selectedPokemonUrl = null
-                        selectedLocationUrl != null -> selectedLocationUrl = null // <-- ADD THIS
+                        selectedLocationUrl != null -> selectedLocationUrl = null
+                        selectedAbilityUrl != null -> selectedAbilityUrl = null
                         currentScreen != "menu" -> currentScreen = "menu"
                     }
                 }
 
+                // top app bar title updates based on what we’re currently showing
                 val topBarTitle = when {
-                    selectedPokemonUrl != null -> "Pokemon Details"
-                    selectedLocationUrl != null -> "Pokémon in Area" // <-- ADD THIS
+                    selectedPokemonUrl != null -> "Pokémon Details"
+                    selectedLocationUrl != null -> "Pokémon in Area"
+                    selectedAbilityUrl != null -> "Ability Details"
                     currentScreen != "menu" -> currentScreen.replaceFirstChar { it.titlecase() } + " List"
                     else -> "PokéDex"
                 }
@@ -119,8 +151,13 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     topBar = {
-                        // Updated condition to show TopAppBar
-                        if (currentScreen != "menu" || selectedPokemonUrl != null || selectedLocationUrl != null) {
+                        // only show a top bar when we’re not on the root menu
+                        if (
+                            currentScreen != "menu" ||
+                            selectedPokemonUrl != null ||
+                            selectedLocationUrl != null ||
+                            selectedAbilityUrl != null
+                        ) {
                             TopAppBar(
                                 title = { Text(topBarTitle) },
                                 navigationIcon = {
@@ -135,8 +172,12 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { innerPadding ->
+
                     val screenModifier = Modifier.padding(innerPadding)
 
+                    // high-level navigation:
+                    // if a "selected*Url" is active we go to a detail screen,
+                    // otherwise we show one of the list/menu screens
                     when {
                         selectedPokemonUrl != null -> {
                             PokemonDetailScreen(
@@ -144,36 +185,74 @@ class MainActivity : ComponentActivity() {
                                 modifier = screenModifier
                             )
                         }
-                        selectedLocationUrl != null -> { // <-- ADD THIS BLOCK
+
+                        selectedLocationUrl != null -> {
                             LocationDetailScreen(
                                 locationUrl = selectedLocationUrl!!,
                                 modifier = screenModifier,
                                 onPokemonSelected = { url -> selectedPokemonUrl = url }
                             )
                         }
+
+                        // JUAN: this is the ability detail screen hook-up
+                        selectedAbilityUrl != null -> {
+                            AbilityDetailScreen(
+                                abilityUrl = selectedAbilityUrl!!,
+                                modifier = screenModifier
+                            )
+                        }
+
                         else -> {
+                            // list / menu level
                             when (currentScreen) {
                                 "menu" -> MainMenuScreen(
                                     modifier = screenModifier,
                                     onNavigate = { screen -> currentScreen = screen }
                                 )
+
                                 "pokemon" -> ListingScreen(
                                     resourceType = "pokemon",
                                     searchHint = "Search by name or Pokédex ID...",
                                     modifier = screenModifier,
                                     onResourceSelected = { url -> selectedPokemonUrl = url }
                                 )
-                                "location" -> ListingScreen( // <-- MODIFY THIS
-                                    resourceType = currentScreen,
+
+                                "location" -> ListingScreen(
+                                    resourceType = "location",
                                     searchHint = "Search for a location...",
                                     modifier = screenModifier,
-                                    onResourceSelected = { url -> selectedLocationUrl = url } // Pass the location URL
+                                    onResourceSelected = { url -> selectedLocationUrl = url }
                                 )
-                                "type", "ability", "item", "move" -> ListingScreen(
-                                    resourceType = currentScreen,
-                                    searchHint = "Search for a(n) $currentScreen...",
+
+                                // JUAN: abilities reuse the generic ListingScreen, but when you
+                                // tap one we store its URL and open AbilityDetailScreen.
+                                "ability" -> ListingScreen(
+                                    resourceType = "ability",
+                                    searchHint = "Search for a(n) ability...",
                                     modifier = screenModifier,
-                                    onResourceSelected = { /* Do nothing for now */ }
+                                    onResourceSelected = { url -> selectedAbilityUrl = url }
+                                )
+
+                                // these are wired to the list UI but we’re not doing detail views yet
+                                "type" -> ListingScreen(
+                                    resourceType = "type",
+                                    searchHint = "Search for a(n) type...",
+                                    modifier = screenModifier,
+                                    onResourceSelected = { /* no-op for now */ }
+                                )
+
+                                "item" -> ListingScreen(
+                                    resourceType = "item",
+                                    searchHint = "Search for a(n) item...",
+                                    modifier = screenModifier,
+                                    onResourceSelected = { /* no-op for now */ }
+                                )
+
+                                "move" -> ListingScreen(
+                                    resourceType = "move",
+                                    searchHint = "Search for a(n) move...",
+                                    modifier = screenModifier,
+                                    onResourceSelected = { /* no-op for now */ }
                                 )
                             }
                         }
@@ -184,8 +263,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// ----------------------------------------------------------------------
+// main menu – just routing to the different list screens
+// ----------------------------------------------------------------------
 
-// Main Menu Composable with all options restored
 @Composable
 fun MainMenuScreen(modifier: Modifier = Modifier, onNavigate: (String) -> Unit) {
     Column(modifier = modifier.padding(16.dp)) {
@@ -206,7 +287,7 @@ fun MenuCard(title: String, onClick: () -> Unit) {
             .padding(vertical = 8.dp)
             .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.hsv(277f,1f, 0.5f))
+        colors = CardDefaults.cardColors(containerColor = Color.hsv(277f, 1f, 0.5f))
     ) {
         Text(
             text = title,
@@ -216,7 +297,10 @@ fun MenuCard(title: String, onClick: () -> Unit) {
     }
 }
 
-// LOCATION data
+// ----------------------------------------------------------------------
+// location detail flow (used when you drill into a location)
+// ----------------------------------------------------------------------
+
 @Composable
 fun LocationInfoCard(locationName: String, regionName: String?, pokemonCount: Int) {
     Card(
@@ -247,7 +331,11 @@ fun LocationInfoCard(locationName: String, regionName: String?, pokemonCount: In
 }
 
 @Composable
-fun LocationDetailScreen(locationUrl: String, modifier: Modifier = Modifier, onPokemonSelected: (String) -> Unit) {
+fun LocationDetailScreen(
+    locationUrl: String,
+    modifier: Modifier = Modifier,
+    onPokemonSelected: (String) -> Unit
+) {
     var pokemonList by remember { mutableStateOf<List<ApiResource>>(emptyList()) }
     var locationDetails by remember { mutableStateOf<LocationDetails?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -257,42 +345,52 @@ fun LocationDetailScreen(locationUrl: String, modifier: Modifier = Modifier, onP
         isLoading = true
         val client = AsyncHttpClient()
 
-        // Step 1: Fetch the Location to get the Location-Area URL
+        // step 1: get the location so we can grab its first area URL
         client.get(locationUrl, object : JsonHttpResponseHandler() {
             override fun onSuccess(statusCode: Int, headers: Headers, jsonResponse: JSON) {
-                locationDetails = json.decodeFromString<LocationDetails>(jsonResponse.jsonObject.toString())
+                locationDetails =
+                    json.decodeFromString(LocationDetails.serializer(), jsonResponse.jsonObject.toString())
                 val areaUrl = locationDetails?.areas?.firstOrNull()?.url
 
                 if (areaUrl != null) {
-                    // Step 2: Fetch the Location-Area using the URL from Step 1
+                    // step 2: hit the area endpoint and get pokemon_encounters
                     client.get(areaUrl, object : JsonHttpResponseHandler() {
                         override fun onSuccess(statusCode: Int, headers: Headers, jsonResponse: JSON) {
                             try {
-                                val locationArea = json.decodeFromString<LocationArea>(jsonResponse.jsonObject.toString())
-                                val uniquePokemon = locationArea.pokemon_encounters.map { it.pokemon }.toSet().toList()
+                                val locationArea =
+                                    json.decodeFromString(LocationArea.serializer(), jsonResponse.jsonObject.toString())
+                                val uniquePokemon = locationArea.pokemon_encounters
+                                    .map { it.pokemon }
+                                    .toSet()
+                                    .toList()
                                 pokemonList = uniquePokemon
                             } catch (e: Exception) {
-                                // Handle parsing error for the second call
+                                // parsing error – leaving silent for now
                             } finally {
                                 isLoading = false
                             }
                         }
 
-                        override fun onFailure(statusCode: Int, headers: Headers?, response: String?, throwable: Throwable?) {
+                        override fun onFailure(
+                            statusCode: Int,
+                            headers: Headers?,
+                            response: String?,
+                            throwable: Throwable?
+                        ) {
                             isLoading = false
                         }
                     })
                 } else {
-                    isLoading = false // No areas found for this location
+                    // no areas for this location, nothing to show
+                    isLoading = false
                 }
             }
 
             override fun onFailure(statusCode: Int, headers: Headers?, response: String?, throwable: Throwable?) {
-                isLoading = false // Failed to fetch initial location details
+                isLoading = false
             }
         })
     }
-
 
     if (isLoading) {
         Text("Loading Pokémon...", modifier = modifier.padding(16.dp))
@@ -303,41 +401,37 @@ fun LocationDetailScreen(locationUrl: String, modifier: Modifier = Modifier, onP
             item {
                 locationDetails?.let {
                     LocationInfoCard(
-                        locationName = it.areas.first().name, // Use area name for more specific title
+                        locationName = it.areas.first().name,
                         regionName = it.region?.name,
                         pokemonCount = pokemonList.size
                     )
                 }
             }
             items(pokemonList) { pokemon ->
-                // Replace the old ListItem with this Button
                 Button(
                     onClick = { onPokemonSelected(pokemon.url) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp),
-                    // Use transparent background to mimic a list item
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
-                    // This Row will arrange the sprite and the name
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val pokemonId = pokemon.url.split("/").dropLast(1).last()
-                        val spriteUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$pokemonId.png"
+                        val spriteUrl =
+                            "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$pokemonId.png"
 
-                        // Sprite
                         AsyncImage(
                             model = spriteUrl,
                             contentDescription = "${pokemon.name} sprite",
-                            modifier = Modifier.size(56.dp) // Adjust size as needed
+                            modifier = Modifier.size(56.dp)
                         )
 
-                        // Pokémon Name
                         Text(
                             text = pokemon.name.replaceFirstChar { it.titlecase() },
                             modifier = Modifier.padding(start = 16.dp)
@@ -349,9 +443,10 @@ fun LocationDetailScreen(locationUrl: String, modifier: Modifier = Modifier, onP
     }
 }
 
+// ----------------------------------------------------------------------
+// generic listing screen – reused for pokemon, abilities, types, etc.
+// ----------------------------------------------------------------------
 
-
-// Reusable Listing Screen for any resource type
 @Composable
 fun ListingScreen(
     resourceType: String,
@@ -365,36 +460,36 @@ fun ListingScreen(
 
     val json = Json { ignoreUnknownKeys = true }
 
-    // Fetch data from the API
+    // every time we switch resourceType ("pokemon" -> "ability" etc) we refetch the correct endpoint
     LaunchedEffect(resourceType) {
         val client = AsyncHttpClient()
-        // Using a high limit to get most/all entries for a given type
         val url = "https://pokeapi.co/api/v2/$resourceType?limit=2000"
 
         client.get(url, object : JsonHttpResponseHandler() {
             override fun onSuccess(statusCode: Int, headers: Headers, jsonResponse: JSON) {
                 try {
-                    val response = json.decodeFromString<ApiResponse>(jsonResponse.jsonObject.toString())
+                    val response =
+                        json.decodeFromString(ApiResponse.serializer(), jsonResponse.jsonObject.toString())
                     allItems = response.results
                     filteredItems = response.results
                 } catch (e: Exception) {
-                    // Handle parsing error if needed
+                    // parsing error – keeping it quiet, list will just be empty
                 }
             }
+
             override fun onFailure(statusCode: Int, headers: Headers?, response: String?, throwable: Throwable?) {
-                // Handle fetch error if needed
+                // request failed – same deal, list stays empty
             }
         })
     }
 
-    // Filter logic that works for all resource types
+    // basic in-memory filter for search bar
     LaunchedEffect(searchQuery, allItems) {
         filteredItems = if (searchQuery.isBlank()) {
             allItems
         } else {
             allItems.filter { item ->
                 val nameMatch = item.name.contains(searchQuery, ignoreCase = true)
-                // Only search by ID if the resource is pokemon
                 if (resourceType == "pokemon") {
                     val id = item.url.split("/").dropLast(1).last()
                     val idMatch = id.contains(searchQuery)
@@ -419,15 +514,14 @@ fun ListingScreen(
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(filteredItems) { item ->
                 val id = item.url.split("/").dropLast(1).last()
-                // Replace ListItem with a styled Button
                 Button(
                     onClick = { onResourceSelected(item.url) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant, // Use the same gray
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant  // And same content color
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
                     Row(
@@ -436,14 +530,84 @@ fun ListingScreen(
                     ) {
                         Text(
                             text = item.name.replaceFirstChar { it.titlecase() },
-                            modifier = Modifier.weight(1f) // Text takes up available space
+                            modifier = Modifier.weight(1f)
                         )
-                        // Show the ID only for Pokémon
+                        // id tag only really makes sense for pokemon, so I left it scoped there
                         if (resourceType == "pokemon") {
                             Text(text = "ID: $id")
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// ability detail screen – this is the new screen I added for my part
+// it takes the ability URL from the list and shows its english effect.
+// ----------------------------------------------------------------------
+
+@Composable
+fun AbilityDetailScreen(
+    abilityUrl: String,
+    modifier: Modifier = Modifier
+) {
+    var abilityDetails by remember { mutableStateOf<AbilityDetails?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val json = Json { ignoreUnknownKeys = true }
+
+    LaunchedEffect(abilityUrl) {
+        val client = AsyncHttpClient()
+
+        client.get(abilityUrl, object : JsonHttpResponseHandler() {
+            override fun onSuccess(statusCode: Int, headers: Headers, jsonResponse: JSON) {
+                try {
+                    val details =
+                        json.decodeFromString(AbilityDetails.serializer(), jsonResponse.jsonObject.toString())
+                    abilityDetails = details
+                    isLoading = false
+                } catch (e: Exception) {
+                    error = "Failed to parse ability data."
+                    isLoading = false
+                }
+            }
+
+            override fun onFailure(statusCode: Int, headers: Headers?, response: String?, throwable: Throwable?) {
+                error = "Failed to fetch ability. Status: $statusCode"
+                isLoading = false
+            }
+        })
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        when {
+            isLoading -> Text("Loading ability...")
+            error != null -> Text(error!!)
+            abilityDetails != null -> {
+                val details = abilityDetails!!
+
+                // grab the english entry if it exists, otherwise just show a fallback
+                val englishEntry =
+                    details.effect_entries.firstOrNull { it.language.name == "en" }
+                val effectText = englishEntry?.short_effect ?: "No effect available."
+
+                val displayName = details.name
+                    .replace("-", " ")
+                    .replaceFirstChar { it.titlecase() }
+
+                Text(
+                    text = displayName,
+                    fontSize = 24.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(text = effectText, fontSize = 16.sp)
             }
         }
     }
