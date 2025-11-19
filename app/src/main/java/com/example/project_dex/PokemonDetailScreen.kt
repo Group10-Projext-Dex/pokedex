@@ -1,7 +1,9 @@
 package com.example.project_dex
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -110,7 +112,13 @@ fun PokemonDetailScreen(pokemonUrl: String, modifier: Modifier = Modifier) {
                     Text(text = details.name.replaceFirstChar { it.titlecase() }, fontSize = 24.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Text("Types: ${details.types.joinToString { it.type.name.replaceFirstChar { c -> c.titlecase() } }}")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        details.types.forEach {
+                            PokemonTypeView(type = it.type.name)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Text("Abilities: ${details.abilities.joinToString { it.ability.name.replaceFirstChar { c -> c.titlecase() } }}")
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -137,4 +145,3 @@ fun PokemonDetailScreen(pokemonUrl: String, modifier: Modifier = Modifier) {
         }
     }
 }
-
