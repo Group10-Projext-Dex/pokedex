@@ -35,8 +35,6 @@ The following REQUIRED files are included:
 - [x] Our 🎥 Demo Video
     - [ ] We have also added the Demo Video Link to the Group Info Form on the course portal.
 
-![Video Demo](VideoDemoPokedex.gif)
-
 The following EXTRA features are implemented:
 
 - [ ] List anything else that you added to improve your submission!
@@ -45,9 +43,9 @@ The following EXTRA features are implemented:
 
 Here's a video that demos all of the app's implemented features:
 
-<img src='http://i.imgur.com/link/to/your/gif/file.gif' title='Video Demo' width='' alt='Video Demo' />
+![Video Demo](VideoDemoPokedex.gif)
 
-VIDEO created with **your chosen video tool**
+VIDEO created with **OBS Studio**
 
 ## Notes
 
