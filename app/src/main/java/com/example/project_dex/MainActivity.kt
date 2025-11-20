@@ -6,10 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +26,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -37,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -47,6 +53,9 @@ import com.example.project_dex.ui.theme.Project_dexTheme
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import kotlinx.serialization.SerialName
 
 // ----------------------------------------------------------------------
 // shared data models for list-style endpoints (pokemon, abilities, etc.)
@@ -126,6 +135,22 @@ data class PokemonTypeDetails(
     val pokemon: List<PokemonSlot>
 )
 
+@Serializable
+data class MoveDetails(
+    val name: String,
+    val accuracy: Int?,
+    val power: Int?,
+    val pp: Int,
+    @SerialName("type") val type: TypeWrapper,
+    @SerialName("learned_by_pokemon")
+    val learnedByPokemon: List<ApiResource>
+)
+
+@Serializable
+data class TypeWrapper(
+    val name: String
+)
+
 class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -147,6 +172,8 @@ class MainActivity : ComponentActivity() {
                 // JUAN: new state for ability details – when this is not null we show AbilityDetailScreen
                 var selectedAbilityUrl by remember { mutableStateOf<String?>(null) }
 
+                var selectedMoveUrl by remember { mutableStateOf<String?>(null) }
+
                 // simple back behavior – clear the most specific detail first, then fall back to menu
                 val navigateBack = {
                     when {
@@ -154,6 +181,7 @@ class MainActivity : ComponentActivity() {
                         selectedTypeUrl != null -> selectedTypeUrl = null
                         selectedLocationUrl != null -> selectedLocationUrl = null
                         selectedAbilityUrl != null -> selectedAbilityUrl = null
+                        selectedMoveUrl != null -> selectedMoveUrl = null
                         currentScreen != "menu" -> currentScreen = "menu"
                     }
                 }
@@ -164,6 +192,7 @@ class MainActivity : ComponentActivity() {
                     selectedTypeUrl != null -> "Pokémon by Type"
                     selectedLocationUrl != null -> "Pokémon in Area"
                     selectedAbilityUrl != null -> "Ability Details"
+                    selectedMoveUrl != null -> "Move Details"
                     currentScreen != "menu" -> currentScreen.replaceFirstChar { it.titlecase() } + " List"
                     else -> "PokéDex"
                 }
@@ -231,6 +260,13 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
+                        selectedMoveUrl != null -> {
+                            MoveDetailScreen(
+                                moveUrl = selectedMoveUrl!!,
+                                modifier = screenModifier
+                            )
+                        }
+
                         else -> {
                             // list / menu level
                             when (currentScreen) {
@@ -271,11 +307,18 @@ class MainActivity : ComponentActivity() {
                                 )
 
                                 // these are wired to the list UI but we’re not doing detail views yet
-                                "item", "move" -> ListingScreen(
+                                "item" -> ListingScreen(
                                     resourceType = currentScreen,
                                     searchHint = "Search for a(n) $currentScreen...",
                                     modifier = screenModifier,
                                     onResourceSelected = { /* no-op for now */ }
+                                )
+
+                                "move" -> ListingScreen(
+                                    resourceType = currentScreen,
+                                    searchHint = "Search for a move...",
+                                    modifier = screenModifier,
+                                    onResourceSelected = { url -> selectedMoveUrl = url }
                                 )
                             }
                         }
@@ -462,6 +505,110 @@ fun LocationDetailScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// moves screen
+// ----------------------------------------------------------------------
+
+@Composable
+fun MoveDetailScreen(moveUrl: String, modifier: Modifier = Modifier) {
+    var moveDetails by remember { mutableStateOf<MoveDetails?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    val json = Json { ignoreUnknownKeys = true }
+
+    val typeColors = mapOf(
+        "normal" to Color(0xFFC6C6A7),
+        "fire" to Color(0xFFF5AC78),
+        "water" to Color(0xFF9DB7F5),
+        "electric" to Color(0xFFFAE078),
+        "grass" to Color(0xFFA7DB8D),
+        "ice" to Color(0xFFBCE6E6),
+        "fighting" to Color(0xFFD67873),
+        "poison" to Color(0xFFC183C1),
+        "ground" to Color(0xFFEBD69D),
+        "flying" to Color(0xFFC6B7F5),
+        "psychic" to Color(0xFFFA92B2),
+        "bug" to Color(0xFFC6D16E),
+        "rock" to Color(0xFFD1C17D),
+        "ghost" to Color(0xFFA292BC),
+        "dragon" to Color(0xFF9780FC),
+        "dark" to Color(0xFFA29288),
+        "steel" to Color(0xFFD1D1E0),
+        "fairy" to Color(0xFFF4B7D9)
+    )
+
+    LaunchedEffect(moveUrl) {
+        isLoading = true
+        val client = AsyncHttpClient()
+        client.get(moveUrl, object : JsonHttpResponseHandler() {
+            override fun onSuccess(statusCode: Int, headers: Headers, jsonResponse: JSON) {
+                try {
+                    val details = json.decodeFromString<MoveDetails>(jsonResponse.jsonObject.toString())
+                    moveDetails = details
+                } catch (e: Exception) {
+                }
+                isLoading = false
+            }
+
+            override fun onFailure(statusCode: Int, headers: Headers?, response: String?, throwable: Throwable?) {
+                isLoading = false
+            }
+        })
+    }
+
+    Column(modifier = modifier.padding(16.dp)) {
+        if (isLoading) {
+            Text("Loading move details...")
+        } else if (moveDetails != null) {
+            val details = moveDetails!!
+            val moveType = details.type.name.lowercase()
+            val backgroundColor = typeColors[moveType] ?: MaterialTheme.colorScheme.surfaceVariant
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = backgroundColor),
+                modifier = Modifier
+                    .fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Title of the Move (Simplified: No Row, no Icon)
+                    Text(
+                        text = details.name.replaceFirstChar { it.titlecase() },
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    // The rest of the move's stats
+                    Text("Power: ${details.power ?: "N/A"}", style = MaterialTheme.typography.bodyLarge)
+                    Text("Accuracy: ${details.accuracy ?: "N/A"}", style = MaterialTheme.typography.bodyLarge)
+                    Text("PP: ${details.pp}", style = MaterialTheme.typography.bodyLarge)
+                    Text("Type: ${details.type.name.replaceFirstChar { it.titlecase() }}", style = MaterialTheme.typography.bodyLarge)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // "Learned By" section (as plain text)
+                    Text(
+                        text = "Learned By:",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val learnedByText =
+                        details.learnedByPokemon.joinToString(separator = ", ") { it.name.replaceFirstChar { char -> char.titlecase() } }
+
+                    Text(
+                        text = learnedByText.ifEmpty { "None" },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        } else {
+            Text("Could not load move details.")
         }
     }
 }
