@@ -40,7 +40,8 @@ Stretch Features:
 
 - [ ] Pokemon Moves
 - [x] Pokemon types
-- [ ] Pokemon abilities
+- [x] Pokemon abilities
+- [x] Dark Theme based on device settings
 
 ### 2. Chosen API(s)
 
