@@ -38,7 +38,7 @@ Required Features:
 
 Stretch Features:
 
-- [ ] Pokemon Moves
+- [x] Pokemon Moves
 - [x] Pokemon types
 - [x] Pokemon abilities
 - [x] Dark Theme based on device settings

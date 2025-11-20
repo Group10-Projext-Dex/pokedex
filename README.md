@@ -37,7 +37,7 @@ The following REQUIRED files are included:
 
 The following EXTRA features are implemented:
 
-- [ ] Dark Mode works well
+- [x] Dark Mode works well
 
 ## 🎥 Demo Video
 
