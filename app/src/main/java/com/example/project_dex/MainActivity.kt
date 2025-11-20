@@ -1,4 +1,5 @@
 package com.example.project_dex
+//.
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.codepath.asynchttpclient.AsyncHttpClient
 import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler
+import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler.JSON   // JUAN: needed for JSON type in callbacks
 import com.example.project_dex.ui.theme.Project_dexTheme
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -109,6 +111,21 @@ data class LanguageRef(
     val name: String
 )
 
+// ----------------------------------------------------------------------
+// type details models (used for the type detail screen teammate added)
+// ----------------------------------------------------------------------
+
+@Serializable
+data class PokemonSlot(
+    val pokemon: ApiResource
+)
+
+@Serializable
+data class PokemonTypeDetails(
+    val name: String,
+    val pokemon: List<PokemonSlot>
+)
+
 class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -125,6 +142,7 @@ class MainActivity : ComponentActivity() {
                 // these nullable urls mean "we are looking at a detail screen for X"
                 var selectedPokemonUrl by remember { mutableStateOf<String?>(null) }
                 var selectedLocationUrl by remember { mutableStateOf<String?>(null) }
+                var selectedTypeUrl by remember { mutableStateOf<String?>(null) }
 
                 // JUAN: new state for ability details – when this is not null we show AbilityDetailScreen
                 var selectedAbilityUrl by remember { mutableStateOf<String?>(null) }
@@ -133,6 +151,7 @@ class MainActivity : ComponentActivity() {
                 val navigateBack = {
                     when {
                         selectedPokemonUrl != null -> selectedPokemonUrl = null
+                        selectedTypeUrl != null -> selectedTypeUrl = null
                         selectedLocationUrl != null -> selectedLocationUrl = null
                         selectedAbilityUrl != null -> selectedAbilityUrl = null
                         currentScreen != "menu" -> currentScreen = "menu"
@@ -142,6 +161,7 @@ class MainActivity : ComponentActivity() {
                 // top app bar title updates based on what we’re currently showing
                 val topBarTitle = when {
                     selectedPokemonUrl != null -> "Pokémon Details"
+                    selectedTypeUrl != null -> "Pokémon by Type"
                     selectedLocationUrl != null -> "Pokémon in Area"
                     selectedAbilityUrl != null -> "Ability Details"
                     currentScreen != "menu" -> currentScreen.replaceFirstChar { it.titlecase() } + " List"
@@ -156,6 +176,7 @@ class MainActivity : ComponentActivity() {
                             currentScreen != "menu" ||
                             selectedPokemonUrl != null ||
                             selectedLocationUrl != null ||
+                            selectedTypeUrl != null ||
                             selectedAbilityUrl != null
                         ) {
                             TopAppBar(
@@ -183,6 +204,14 @@ class MainActivity : ComponentActivity() {
                             PokemonDetailScreen(
                                 pokemonUrl = selectedPokemonUrl!!,
                                 modifier = screenModifier
+                            )
+                        }
+
+                        selectedTypeUrl != null -> {
+                            TypeDetailScreen(
+                                typeUrl = selectedTypeUrl!!,
+                                modifier = screenModifier,
+                                onPokemonSelected = { url -> selectedPokemonUrl = url }
                             )
                         }
 
@@ -224,6 +253,14 @@ class MainActivity : ComponentActivity() {
                                     onResourceSelected = { url -> selectedLocationUrl = url }
                                 )
 
+                                // type list → opens type detail screen
+                                "type" -> ListingScreen(
+                                    resourceType = "type",
+                                    searchHint = "Search for a type...",
+                                    modifier = screenModifier,
+                                    onResourceSelected = { url -> selectedTypeUrl = url }
+                                )
+
                                 // JUAN: abilities reuse the generic ListingScreen, but when you
                                 // tap one we store its URL and open AbilityDetailScreen.
                                 "ability" -> ListingScreen(
@@ -234,23 +271,9 @@ class MainActivity : ComponentActivity() {
                                 )
 
                                 // these are wired to the list UI but we’re not doing detail views yet
-                                "type" -> ListingScreen(
-                                    resourceType = "type",
-                                    searchHint = "Search for a(n) type...",
-                                    modifier = screenModifier,
-                                    onResourceSelected = { /* no-op for now */ }
-                                )
-
-                                "item" -> ListingScreen(
-                                    resourceType = "item",
-                                    searchHint = "Search for a(n) item...",
-                                    modifier = screenModifier,
-                                    onResourceSelected = { /* no-op for now */ }
-                                )
-
-                                "move" -> ListingScreen(
-                                    resourceType = "move",
-                                    searchHint = "Search for a(n) move...",
+                                "item", "move" -> ListingScreen(
+                                    resourceType = currentScreen,
+                                    searchHint = "Search for a(n) $currentScreen...",
                                     modifier = screenModifier,
                                     onResourceSelected = { /* no-op for now */ }
                                 )
@@ -444,6 +467,94 @@ fun LocationDetailScreen(
 }
 
 // ----------------------------------------------------------------------
+// type detail screen – teammate’s feature, kept as-is
+// ----------------------------------------------------------------------
+
+@Composable
+fun TypeDetailScreen(
+    typeUrl: String,
+    modifier: Modifier = Modifier,
+    onPokemonSelected: (String) -> Unit
+) {
+    var pokemonList by remember { mutableStateOf<List<ApiResource>>(emptyList()) }
+    var typeName by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    val json = Json { ignoreUnknownKeys = true }
+
+    LaunchedEffect(typeUrl) {
+        isLoading = true
+        val client = AsyncHttpClient()
+
+        client.get(typeUrl, object : JsonHttpResponseHandler() {
+            override fun onSuccess(statusCode: Int, headers: Headers, jsonResponse: JSON) {
+                try {
+                    val typeDetails =
+                        json.decodeFromString<PokemonTypeDetails>(jsonResponse.jsonObject.toString())
+                    pokemonList = typeDetails.pokemon.map { it.pokemon }
+                    typeName = typeDetails.name
+                } catch (e: Exception) {
+                    // Handle parsing error
+                } finally {
+                    isLoading = false
+                }
+            }
+
+            override fun onFailure(statusCode: Int, headers: Headers?, response: String?, throwable: Throwable?) {
+                isLoading = false
+            }
+        })
+    }
+
+    if (isLoading) {
+        Text("Loading Pokémon...", modifier = modifier.padding(16.dp))
+    } else if (pokemonList.isEmpty()) {
+        Text("No Pokémon found for this type.", modifier = modifier.padding(16.dp))
+    } else {
+        LazyColumn(modifier = modifier) {
+            item {
+                Text(
+                    text = "Pokémon of type: ${typeName?.replaceFirstChar { it.titlecase() }}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            items(pokemonList) { pokemon ->
+                Button(
+                    onClick = { onPokemonSelected(pokemon.url) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val pokemonId = pokemon.url.split("/").dropLast(1).last()
+                        val spriteUrl =
+                            "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/$pokemonId.png"
+
+                        AsyncImage(
+                            model = spriteUrl,
+                            contentDescription = "${pokemon.name} sprite",
+                            modifier = Modifier.size(56.dp)
+                        )
+
+                        Text(
+                            text = pokemon.name.replaceFirstChar { it.titlecase() },
+                            modifier = Modifier.padding(start = 16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
 // generic listing screen – reused for pokemon, abilities, types, etc.
 // ----------------------------------------------------------------------
 
@@ -524,7 +635,7 @@ fun ListingScreen(
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
-                    Row(/////////////////////////
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
